@@ -35,10 +35,20 @@ Bu projede hem AI hem de deploy hizmetlerini kullanacagiz. Asagidaki butona tikl
 
 Bu uygulama Vertex AI uzerinden Gemini modeline baglanarak YouTube videolarini ozetliyor. Bunun icin Cloud Run servisinin Vertex AI'a erisim iznine ihtiyaci var.
 
+### Proje ID'nizi kaydedin
+
+Once aktif projenizi bir degiskene atayin — bu degiskeni tutorial boyunca kullanacagiz:
+
+```sh
+export PROJECT_ID=$(gcloud config get-value project) && echo "Proje ID: $PROJECT_ID"
+```
+
+Proje ID'nizi gormelisiniz. Bos geliyorsa proje secmeden devam etmissiniz demektir — geri donup proje secin.
+
 ### Service account'a Vertex AI izni verin
 
 ```sh
-PROJECT_NUMBER=$(gcloud projects describe {{project-id}} --format='value(projectNumber)') && gcloud projects add-iam-policy-binding {{project-id}} --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/aiplatform.user"
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)') && gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/aiplatform.user"
 ```
 
 **Ne yapti bu komut?**
@@ -142,16 +152,18 @@ Sol menuden **Credits** sekmesine tiklayin. Size verilen workshop kredisini bura
 
 ### Budget Alert kurun
 
-```sh
-gcloud billing budgets create --billing-account=$(gcloud billing accounts list --format='value(name)' --limit=1) --display-name="Workshop Budget" --budget-amount=5 --threshold-rule=percent=50 --threshold-rule=percent=90 --threshold-rule=percent=100
-```
+Budget'i Cloud Console uzerinden olusturun:
 
-Bu komut ne yapar:
+<walkthrough-menu-navigation sectionId="BILLING_SECTION"></walkthrough-menu-navigation>
 
-- **$5 limitli** bir budget olusturur
-- Kredinizin **%50, %90 ve %100**'une ulasildiginda e-posta uyarisi gonderir
+Sol menuden **Budgets & alerts** sekmesine tiklayin, sonra **Create budget** butonuna basin:
 
-**Tip:** Budget sadece uyari verir, hizmetleri otomatik durdurmaz.
+1. Name: "Workshop Budget"
+2. Amount: $5
+3. Alert thresholds: %50, %90, %100
+4. **Finish** butonuna basin
+
+**Tip:** Budget sadece uyari verir, hizmetleri otomatik durdurmaz. Ama ne kadar harcadigini her an bilirsin.
 
 ## Cloud Run'a Deploy Etme
 
@@ -160,7 +172,7 @@ Simdi uygulamayi internete aciyoruz!
 ### Deploy komutunu calistirin
 
 ```sh
-cd $(find ~ -path "*/gcp-workshop-tutorial*/summarizer-app" -type d 2>/dev/null | head -1) && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
+cd $(find ~ -path "*/gcp-workshop-tutorial*/summarizer-app" -type d 2>/dev/null | head -1) && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project $PROJECT_ID
 ```
 
 Ilk seferde "Do you want to continue (Y/n)?" sorusu gelecek — **Y** yazip Enter'a basin.
@@ -182,7 +194,7 @@ Bu URL sizin AI uygulamanizin adresi!
 URL'yi bir degiskene atayin:
 
 ```sh
-SERVICE_URL=$(gcloud run services describe youtube-summarizer --region us-central1 --project {{project-id}} --format='value(status.url)') && echo "Uygulama adresiniz: $SERVICE_URL"
+SERVICE_URL=$(gcloud run services describe youtube-summarizer --region us-central1 --project $PROJECT_ID --format='value(status.url)') && echo "Uygulama adresiniz: $SERVICE_URL"
 ```
 
 Ana sayfanin calisiyor mu kontrol edin:
@@ -219,20 +231,20 @@ Workshop bittikten sonra gereksiz ucret olusmamaasi icin kaynaklari temizleyin.
 Cloud Run servisini silin:
 
 ```sh
-gcloud run services delete youtube-summarizer --region us-central1 --project {{project-id}} --quiet
+gcloud run services delete youtube-summarizer --region us-central1 --project $PROJECT_ID --quiet
 ```
 
 Artifact Registry deposunu silin:
 
 ```sh
-gcloud artifacts repositories delete cloud-run-source-deploy --location=us-central1 --project={{project-id}} --quiet
+gcloud artifacts repositories delete cloud-run-source-deploy --location=us-central1 --project=$PROJECT_ID --quiet
 ```
 
 
 Veya projenin tamamini silin:
 
 ```sh
-gcloud projects delete {{project-id}}
+gcloud projects delete $PROJECT_ID
 ```
 
 ## Harcama Ozeti — Krediniz Nereye Gitti?
