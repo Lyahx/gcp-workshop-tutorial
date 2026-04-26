@@ -83,11 +83,28 @@ gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gc
 gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')-compute@developer.gserviceaccount.com" --role="roles/logging.logWriter"
 ```
 
+Cloud Build service account'una da gerekli izinleri verin:
+
+```sh
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')@cloudbuild.gserviceaccount.com" --role="roles/artifactregistry.writer"
+```
+
+```sh
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')@cloudbuild.gserviceaccount.com" --role="roles/run.admin"
+```
+
+```sh
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')@cloudbuild.gserviceaccount.com" --role="roles/iam.serviceAccountUser"
+```
+
 **Ne yapti bu komutlar?**
 
-- **aiplatform.user** — Gemini modeline istek gonderme izni
-- **storage.admin** — Deploy sirasinda kaynak dosyalari Cloud Storage'a yukleme izni
-- **logging.logWriter** — Uygulama loglarini Cloud Logging'e yazma izni
+- **aiplatform.user** — Gemini modeline istek gonderme izni (Compute SA)
+- **storage.admin** — Deploy sirasinda kaynak dosyalari Cloud Storage'a yukleme izni (Compute SA)
+- **logging.logWriter** — Uygulama loglarini Cloud Logging'e yazma izni (Compute SA)
+- **artifactregistry.writer** — Cloud Build'in Docker image'i Artifact Registry'e push etme izni
+- **run.admin** — Cloud Build'in Cloud Run servisini olusturma ve guncelleme izni
+- **iam.serviceAccountUser** — Cloud Build'in service account adina islem yapabilme izni
 
 **Neden Vertex AI?**
 Vertex AI, Google'in kurumsal AI platformudur. Her Gemini cagrisi dogrudan GCP kredinizden dusuler — boylece workshop kredinizi somut olarak kullanmis olursunuz.
