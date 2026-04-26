@@ -260,14 +260,15 @@ Sol menuden **Reports** sekmesine tiklayin.
 ### Ne goreceksiniz?
 
 Grafik halinde hizmet bazinda harcama dagilimini goreceksiniz:
-
+ 
 - **Vertex AI** — Her Gemini cagrisi token basina ucretlendirilir. Kisa bir video ozeti yaklasik $0.001-0.01 arasinda.
 - **Cloud Run** — Container calisma suresi. Serverless oldugu icin sadece istek geldiginde ucret olusur.
 - **Cloud Build** — Image build suresi. Ilk deploy sonrasi ucret olusur.
 - **Artifact Registry** — Docker image depolama.
-
 Sag ust kosedeki tarih filtresini bugunle sinirlandirin. Projenin toplam maliyetini $0.05 - $0.30 arasinda gormeniz beklenir.
-
+ 
+**Onemli Not:** Harcamalar anlık gozukmez — birkac saat, bazen 24 saate kadar surebilir. Simdi $0.00 goruyorsaniz normal, birkaç saat sonra tekrar bakin.
+ 
 **Iste bu kadar!** Workshop boyunca harcanan gercek maliyeti gordunuz. Kredinizin geri kalani diger projelerde kullanilabilir.
 
 ## Tebrikler!
