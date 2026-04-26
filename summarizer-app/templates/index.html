@@ -206,7 +206,7 @@
                     <span class="text-sm font-medium text-blue-800 uppercase tracking-wider">Configuration</span>
                 </div>
                 
-                <form action="/summarize" method="post" id="summarizeForm" class="p-8 space-y-6">
+                <form id="summarizeForm" class="p-8 space-y-6">
                     
                     <!-- YouTube Link -->
                     <div class="space-y-2 group">
@@ -260,6 +260,15 @@
                 </form>
             </div>
 
+            <!-- Summary Result -->
+            <div id="summaryResult" class="card shadow-sm overflow-hidden mt-6 hidden">
+                <div class="bg-green-50 px-6 py-3 border-b border-gray-200 flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-4 h-4 text-green-600"></i>
+                    <span class="text-sm font-medium text-green-800 uppercase tracking-wider">Summary</span>
+                </div>
+                <div id="summaryText" class="p-8 text-gray-700 leading-relaxed whitespace-pre-wrap"></div>
+            </div>
+
             <!-- Workshop Footer Info -->
             <div class="mt-8 grid grid-cols-3 gap-4 text-center opacity-0 animate-fade-up delay-300">
                 <div class="p-3 hover:bg-white rounded-lg transition-colors cursor-default">
@@ -290,28 +299,36 @@
     </footer>
 
     <script>
-        // Initialize Icons
         lucide.createIcons();
 
         const form = document.getElementById('summarizeForm');
         const loading = document.getElementById('loadingOverlay');
+        const summaryResult = document.getElementById('summaryResult');
+        const summaryText = document.getElementById('summaryText');
 
-        // Handle form submission visuals
-        form.onsubmit = () => {
+        form.onsubmit = async (e) => {
+            e.preventDefault();
             loading.classList.remove('hidden');
             loading.classList.add('flex');
             loading.style.opacity = "0";
-            requestAnimationFrame(() => {
-                loading.style.opacity = "1";
-            });
-            
-            setTimeout(() => {
+            requestAnimationFrame(() => { loading.style.opacity = "1"; });
+            summaryResult.classList.add('hidden');
+
+            const formData = new FormData(form);
+            try {
+                const response = await fetch('/summarize', { method: 'POST', body: formData });
+                const text = await response.text();
                 loading.style.opacity = "0";
-                setTimeout(() => {
-                    loading.classList.add('hidden');
-                    loading.classList.remove('flex');
-                }, 300);
-            }, 3000);
+                setTimeout(() => { loading.classList.add('hidden'); loading.classList.remove('flex'); }, 300);
+                summaryText.textContent = text;
+                summaryResult.classList.remove('hidden');
+                summaryResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (err) {
+                loading.style.opacity = "0";
+                setTimeout(() => { loading.classList.add('hidden'); loading.classList.remove('flex'); }, 300);
+                summaryText.textContent = 'Error: ' + err.message;
+                summaryResult.classList.remove('hidden');
+            }
         };
     </script>
 </body>
