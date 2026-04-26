@@ -1,6 +1,6 @@
 # Gemini ile YouTube Ozetleyici — Cloud Run Workshop
 
-Bu tutorial'da Google'in Gemini AI modelini kullanarak YouTube videolarini ve PDF'leri ozetleyen bir web uygulamasi olusturacak ve Cloud Run'a deploy edeceksiniz.
+Bu tutorial'da Google'in Gemini AI modelini kullanarak YouTube videolarini ozetleyen bir web uygulamasi olusturacak ve Cloud Run'a deploy edeceksiniz.
 
 **Tahmini sure:** 45-60 dakika
 **Maliyet:** Ucretsiz (Free tier ve workshop kredileri)
@@ -19,26 +19,58 @@ Proje hazir oldugunda **Next** butonuna basin.
 
 Bu projede hem AI hem de deploy hizmetlerini kullanacagiz. Asagidaki butona tiklayarak hepsini bir seferde etkinlestirin:
 
-<walkthrough-enable-apis apis="aiplatform.googleapis.com,run.googleapis.com,cloudbuild.googleapis.com,cloudresourcemanager.googleapis.com,artifactregistry.googleapis.com"></walkthrough-enable-apis>
+<walkthrough-enable-apis apis="run.googleapis.com,cloudbuild.googleapis.com,cloudresourcemanager.googleapis.com,artifactregistry.googleapis.com,secretmanager.googleapis.com"></walkthrough-enable-apis>
 
 **Ne etkinlestirdik?**
 
-- **Vertex AI** — Gemini modeline erisim saglayan Google'in AI platformu
 - **Cloud Run** — Uygulamamizi serverless olarak calistiracak platform
 - **Cloud Build** — Kaynak koddan otomatik Docker image olusturacak servis
 - **Cloud Resource Manager** — Proje ve kaynak yonetimi
 - **Artifact Registry** — Docker image deposu
+- **Secret Manager** — API key'i guvenle saklamak icin
 
 **Tip:** Etkinlestirme birkac saniye surebilir. Yesil tik gorunene kadar bekleyin.
 
-## Proje Dosyalarini Indirme
+## Gemini API Key Alma
 
-Uygulama dosyalari GitHub'da hazir bekliyor. Onlari Cloud Shell'e indirelim.
+Bu uygulama Gemini AI kullanarak YouTube videolarini ozetliyor. Bunun icin bir API key gerekiyor.
 
-Proje klasorune gidin:
+### API key olusturun
+
+Asagidaki linke gidin:
+
+```
+https://aistudio.google.com/apikey
+```
+
+1. **"Create API key"** butonuna basin
+2. **"Create API key in new project"** secin
+3. Olusturulan key'i kopyalayin — bir sonraki adimda kullanacagiz
+
+**Onemli:** API key'inizi kimseyle paylasmayiniz!
+
+### API key'i Secret Manager'a kaydedin
+
+Terminalde asagidaki komutu calistirin, `BURAYA_KEY` yerine kopyaladiginiz key'i yapistirin:
 
 ```sh
-cd ~ && git clone https://github.com/Lyahx/gcp-workshop-tutorial.git && cd ~/gcp-workshop-tutorial/summarizer-app
+echo -n "BURAYA_KEY" | gcloud secrets create gemini-api-key --data-file=- --project {{project-id}}
+```
+
+### Secret Manager'a erisim izni verin
+
+```sh
+PROJECT_NUMBER=$(gcloud projects describe {{project-id}} --format='value(projectNumber)') && gcloud secrets add-iam-policy-binding gemini-api-key --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" --project {{project-id}}
+```
+
+**Neden Secret Manager?** API key gibi hassas bilgileri kod icine veya environment variable olarak yazmak guvenli degildir. Secret Manager bu bilgileri sifreliyerek saklar ve sadece yetkili servislerin erisebilecegi sekilde korur.
+
+## Proje Dosyalarini Indirme
+
+Uygulama dosyalari GitHub'da hazir bekliyor.
+
+```sh
+cd ~/cloudshell_open/gcp-workshop-tutorial/summarizer-app
 ```
 
 Dosyalari listeleyin:
@@ -54,6 +86,8 @@ Su dosyalari gormelisiniz:
 - **Dockerfile** — Docker paketleme tarifi
 - **templates/index.html** — Web arayuzu
 
+**Not:** Bu repo tutorial baslarken otomatik olarak klonlandi. Dosyalar hazir!
+
 ## Projeyi Anlama: app.py
 
 Backend kodunu inceleyelim:
@@ -64,16 +98,13 @@ cat app.py
 
 ### Kodun yaptiklari
 
-**1) Vertex AI baglantisi:**
-Uygulama, Google'in Vertex AI platformu uzerinden Gemini 2.0 Flash modeline baglanir. Gemini, Google'in en guncel AI modelidir.
+**1) Gemini AI baglantisi:**
+Uygulama, Google AI Studio uzerinden Gemini 2.5 Flash modeline baglanir. API key environment variable olarak okunur — kod icine yazilmaz.
 
-**2) YouTube transkript cekilmesi:**
-`youtube-transcript-api` kutuphanesi, YouTube videosunun altyazilarini otomatik olarak indirir. Gemini bu metni okuyarak ozetleme yapar.
+**2) YouTube ozeti nasil calisir:**
+Gemini'ye YouTube video URL'si ve bir prompt gonderilir. Gemini videoyu analiz edip ozet uretir. Altyazi zorunlu degil — Gemini videoyu direkt anlayabilir.
 
-**3) PDF destegi:**
-`pdfplumber` kutuphanesi ile yuklenen PDF dosyalari metin olarak okunur ve ayni sekilde Gemini'ye gonderilir.
-
-**4) Iki temel route (endpoint):**
+**3) Iki temel route (endpoint):**
 - `GET /` — Ana sayfayi gosterir (HTML form)
 - `POST /summarize` — Video linkini alir, Gemini'ye gonderir, ozeti dondurur
 
@@ -88,81 +119,76 @@ cat templates/index.html
 Kullanicidan iki sey aliyor:
 
 - **YouTube URL** — Ozetlenecek videonun linki
-- **Ek prompt** (opsiyonel) — "Sadece teknik kisimlar" gibi odaklanma talimati
+- **Custom Instructions** (opsiyonel) — "Summarize in Turkish" veya "List key points" gibi ozel talimatlar
 
-Form submit edildiginde JavaScript, `/summarize` endpoint'ine POST istegi atar ve gelen ozeti sayfada gosterir.
+## Gemini API Nedir?
 
-## Vertex AI ve Gemini Nedir?
+Bu projede kullandigimiz en onemli kavram Gemini API.
 
-Bu projede kullandigimiz en onemli yeni kavram Vertex AI.
+**Google AI Studio:** Google'in AI modellerine erisim saglayan platform. Ucretsiz tier ile gunluk 1500 istek yapabilirsiniz.
 
-**Vertex AI:** Google Cloud'un yapay zeka platformu. Gemini dahil Google'in tum AI modellerine API uzerinden erisim saglar. Ayrica kendi ML modellerinizi egitip deploy edebilirsiniz.
-
-**Gemini 2.0 Flash:** Google'in hizli ve ekonomik AI modelidir. Metin anlama, ozetleme, soru-cevap gibi gorevlerde cok basarilidir. "Flash" versiyonu daha hizli ve daha ucuz, buyuk dil anlama gorevleri icin idealdir.
+**Gemini 2.5 Flash:** Google'in hizli ve ekonomik AI modelidir. Metin anlama, ozetleme, soru-cevap gibi gorevlerde cok basarilidir.
 
 **Kodda nasil kullaniliyor?**
 ```python
-# Vertex AI baslat
-vertexai.init(project=PROJECT_ID, location="us-central1")
+import google.generativeai as genai
 
-# Gemini modeline baglan
-model = GenerativeModel("gemini-2.0-flash-001")
+# API key ile baglanti kur
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# Icerik gonder ve ozet al
-response = model.generate_content(prompt)
+# Modeli sec
+model = genai.GenerativeModel("gemini-2.5-flash")
+
+# Prompt gonder, ozet al
+response = model.generate_content(f"Summarize: {youtube_url}")
 ```
 
-Bu uc satir, tum AI ozetleme mekanizmasinin ozudur.
+Bu uc adim tum AI ozetleme mekanizmasinin ozudur.
 
-## Lokal Test
+## Kredi ve Budget Kurulumu
 
-Deploy etmeden once uygulamayi Cloud Shell icinde test edelim.
+Workshop'ta size verilen krediyi bu projede kullanacaksiniz. Deploy etmeden once budget kurarak harcamayi takip altina alalim.
 
-Virtual environment olusturun ve kutuphaneleri yukleyin:
+### Kredinizi kontrol edin
+
+Billing sayfasina gidin:
+
+<walkthrough-menu-navigation sectionId="BILLING_SECTION"></walkthrough-menu-navigation>
+
+Sol menuden **Credits** sekmesine tiklayin. Size verilen workshop kredisini burada gormelisiniz.
+
+### Budget Alert kurun
 
 ```sh
-cd ~/gcp-workshop-tutorial/summarizer-app && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt --quiet
+gcloud billing budgets create --billing-account=$(gcloud billing accounts list --format='value(name)' --limit=1) --display-name="Workshop Budget" --budget-amount=5 --threshold-rule=percent=50 --threshold-rule=percent=90 --threshold-rule=percent=100
 ```
 
-Bu biraz sure alabilir, kutuphaneler yukleniyor.
+Bu komut ne yapar:
 
-Uygulamayi baslatin:
+- **$5 limitli** bir budget olusturur
+- Kredinizin **%50, %90 ve %100**'une ulasildiginda e-posta uyarisi gonderir
 
-```sh
-python app.py &
-```
-
-`Running on http://0.0.0.0:8080` mesajini gormelisiniz.
-
-API'yi test edin:
-
-```sh
-curl -s http://localhost:8080/
-```
-
-HTML ciktisi goruyorsaniz uygulama calisiyor demektir. Arkaplan surecini durdurun:
-
-```sh
-kill %1 2>/dev/null && deactivate
-```
+**Tip:** Budget sadece uyari verir, hizmetleri otomatik durdurmaz.
 
 ## Cloud Run'a Deploy Etme
 
-Simdi uygulamayi internete aciyoruz.
-
-### Arka planda ne oluyor?
-
-Hava durumu projesinin deploy surecinin aynisi — sadece bu sefer uygulama icinde Gemini API cagrisi yapiliyor. Cloud Run container'i baslatinca, her gelen istek Vertex AI'a gidip Gemini'den ozet alip kullaniciya donduruyor.
+Simdi uygulamayi internete aciyoruz!
 
 ### Deploy komutunu calistirin
 
 ```sh
-cd ~/gcp-workshop-tutorial/summarizer-app && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
+cd ~/cloudshell_open/gcp-workshop-tutorial/summarizer-app && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
 ```
 
 Ilk seferde "Do you want to continue (Y/n)?" sorusu gelecek — **Y** yazip Enter'a basin.
 
-**Bu adim 3-5 dakika surebilir.**
+**Bu adim 3-5 dakika surebilir.** Python image indiriliyor ve kutuphaneler kuruluyor.
+
+### API key'i servise baglayin
+
+```sh
+gcloud run services update youtube-summarizer --region us-central1 --project {{project-id}} --set-secrets GEMINI_API_KEY=gemini-api-key:latest
+```
 
 ### Basarili deploy ciktisi
 
@@ -185,21 +211,17 @@ SERVICE_URL=$(gcloud run services describe youtube-summarizer --region us-centra
 Ana sayfanin calisiyor mu kontrol edin:
 
 ```sh
-curl -s $SERVICE_URL/ | head -20
+curl -s $SERVICE_URL/ | head -5
 ```
-
-HTML ciktisi gormelisiniz.
 
 ### Tarayicida test edin
 
-Yukaridaki echo komutunun verdigi URL'yi kopyalayip tarayicinizin adres cubuguna yapistirin.
+URL'yi kopyalayip tarayicinizin adres cubuguna yapistirin.
 
-Karsınıza bir form gelecek:
-
-1. Herhangi bir YouTube video URL'si yapistirin (ornegin bir TED Talk)
-2. Opsiyonel olarak ek prompt girin: "Sadece ana fikirleri listele"
-3. **Summarize** butonuna basin
-4. Gemini birkaç saniye icinde ozeti uretecek
+1. Herhangi bir YouTube video URL'si yapistirin
+2. Opsiyonel: Custom Instructions girin — ornegin "Summarize in Turkish, use bullet points"
+3. **Summarize Content** butonuna basin
+4. Gemini birkaç saniye icinde ozeti uretecek!
 
 ## Cloud Console'dan Inceleme
 
@@ -211,9 +233,7 @@ Deploy ettigimiz servisi goruntusel arayuzden inceleyelim.
 
 - **METRICS** — Kac istek geldi, Gemini kac saniyede yanit verdi
 - **LOGS** — Her ozetleme istegi burada gorunur
-- **REVISIONS** — Deploy gecmisi
-
-**Tip:** LOGS sekmesinde Gemini'nin kac token kullandigini da gorebilirsiniz. Token = AI'in islediği metin birimi. Ne kadar uzun video, o kadar cok token.
+- **REVISIONS** — Deploy gecmisi, her deploy yeni bir revision olusturur
 
 ## Temizlik
 
@@ -231,11 +251,39 @@ Artifact Registry deposunu silin:
 gcloud artifacts repositories delete cloud-run-source-deploy --location=us-central1 --project={{project-id}} --quiet
 ```
 
+Secret'i silin:
+
+```sh
+gcloud secrets delete gemini-api-key --project={{project-id}} --quiet
+```
+
 Veya projenin tamamini silin:
 
 ```sh
 gcloud projects delete {{project-id}}
 ```
+
+## Harcama Ozeti — Krediniz Nereye Gitti?
+
+Servisleri sildikten sonra bu projenin toplam ne kadara mal oldugunu goreceğiz.
+
+### Billing Reports sayfasina gidin
+
+<walkthrough-menu-navigation sectionId="BILLING_SECTION"></walkthrough-menu-navigation>
+
+Sol menuden **Reports** sekmesine tiklayin.
+
+### Ne goreceksiniz?
+
+Grafik halinde hizmet bazinda harcama dagilimini goreceksiniz:
+
+- **Cloud Run** — Container calisma suresi. Serverless oldugu icin sadece istek geldiginde ucret olusur.
+- **Cloud Build** — Image build suresi. Ilk deploy sonrasi ucret olusur.
+- **Artifact Registry** — Docker image depolama.
+
+Sag ust kosedeki tarih filtresini bugunle sinirlandirin. Projenin toplam maliyetini $0.05 - $0.30 arasinda gormeniz beklenir.
+
+**Iste bu kadar!** Workshop boyunca harcanan gercek maliyeti gordunuz. Kredinizin geri kalani diger projelerde kullanilabilir.
 
 ## Tebrikler!
 
@@ -243,16 +291,24 @@ Gercek bir AI uygulamasi olusturup internete deploy ettiniz!
 
 **Bu projede ogrendikleriniz:**
 
-- **Vertex AI** — Google'in AI platformuna API uzerinden erisim
-- **Gemini 2.0 Flash** — Buyuk dil modeli ile metin ozetleme
-- **youtube-transcript-api** — YouTube transkripti otomatik indirme
+- **Gemini API** — Google AI Studio uzerinden AI modeline erisim
+- **Secret Manager** — Hassas bilgileri guvenli saklama
 - **Flask full-stack** — Backend + frontend entegrasyonu
 - **Cloud Run deploy** — AI destekli uygulamalari serverless deploy etme
+- **Budget & Credits** — GCP kredi yonetimi ve maliyet takibi
 
 ### Challenge
 
-Kendi basiniza deneyin: Uygulamaya dil secenegi ekleyin. Kullanici "Turkce ozet yap" veya "English summary" secebilsin. Ipucu: prompt'a dil talimatı eklemek yeterli.
+Kendi basiniza deneyin: Custom Instructions kutusuna farkli diller ve formatlar deneyin:
+- "Summarize in Turkish using bullet points"
+- "Extract only the key statistics mentioned"
+- "Write a tweet-sized summary"
 
+### Faydali linkler
+
+- [Google AI Studio](https://aistudio.google.com)
+- [Gemini API dokumantasyonu](https://ai.google.dev/gemini-api/docs)
+- [Cloud Run dokumantasyonu](https://cloud.google.com/run/docs)
 ### Faydali linkler
 
 - [Vertex AI dokumantasyonu](https://cloud.google.com/vertex-ai/docs)
