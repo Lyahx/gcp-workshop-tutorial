@@ -3,7 +3,7 @@
 Bu tutorial'da Google'in Gemini AI modelini kullanarak YouTube videolarini ozetleyen bir web uygulamasi olusturacak ve Cloud Run'a deploy edeceksiniz.
 
 **Tahmini sure:** 45-60 dakika
-**Maliyet:** Ucretsiz (Free tier ve workshop kredileri)
+**Maliyet:** Workshop kredisi kullanilir (Vertex AI token bazli ucretlendirme)
 
 Baslamak icin **Start** butonuna tiklayin.
 
@@ -31,46 +31,28 @@ Bu projede hem AI hem de deploy hizmetlerini kullanacagiz. Asagidaki butona tikl
 
 **Tip:** Etkinlestirme birkac saniye surebilir. Yesil tik gorunene kadar bekleyin.
 
-## Gemini API Key Alma
+## Vertex AI Izin Kurulumu
 
-Bu uygulama Gemini AI kullanarak YouTube videolarini ozetliyor. Bunun icin bir API key gerekiyor.
+Bu uygulama Vertex AI uzerinden Gemini modeline baglanarak YouTube videolarini ozetliyor. Bunun icin Cloud Run servisinin Vertex AI'a erisim iznine ihtiyaci var.
 
-### API key olusturun
-
-Asagidaki linke gidin:
-
-```
-https://aistudio.google.com/apikey
-```
-
-1. **"Create API key"** butonuna basin
-2. **"Create API key in new project"** secin
-3. Olusturulan key'i kopyalayin — bir sonraki adimda kullanacagiz
-
-**Onemli:** API key'inizi kimseyle paylasmayiniz!
-
-### API key'i Secret Manager'a kaydedin
-
-Terminalde asagidaki komutu calistirin, `BURAYA_KEY` yerine kopyaladiginiz key'i yapistirin:
+### Service account'a Vertex AI izni verin
 
 ```sh
-echo -n "BURAYA_KEY" | gcloud secrets create gemini-api-key --data-file=- --project {{project-id}}
+PROJECT_NUMBER=$(gcloud projects describe {{project-id}} --format='value(projectNumber)') && gcloud projects add-iam-policy-binding {{project-id}} --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/aiplatform.user"
 ```
 
-### Secret Manager'a erisim izni verin
+**Ne yapti bu komut?**
+Cloud Run uygulamaniz bir "service account" kimligiyle calisir. Bu komut o kimlige Vertex AI'a istek gonderme iznini verdi. Olmadan uygulama 403 hatasi alir.
 
-```sh
-PROJECT_NUMBER=$(gcloud projects describe {{project-id}} --format='value(projectNumber)') && gcloud secrets add-iam-policy-binding gemini-api-key --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" --project {{project-id}}
-```
-
-**Neden Secret Manager?** API key gibi hassas bilgileri kod icine veya environment variable olarak yazmak guvenli degildir. Secret Manager bu bilgileri sifreliyerek saklar ve sadece yetkili servislerin erisebilecegi sekilde korur.
+**Neden Vertex AI?**
+Vertex AI, Google'in kurumsal AI platformudur. Her Gemini cagrisi dogrudan GCP kredinizden dusuler — boylece workshop kredinizi somut olarak kullanmis olursunuz.
 
 ## Proje Dosyalarini Indirme
 
 Uygulama dosyalari GitHub'da hazir bekliyor.
 
 ```sh
-cd ~/cloudshell_open/gcp-workshop-tutorial/summarizer-app
+cd $(find ~ -path "*/gcp-workshop-tutorial*/summarizer-app" -type d 2>/dev/null | head -1)
 ```
 
 Dosyalari listeleyin:
@@ -121,11 +103,11 @@ Kullanicidan iki sey aliyor:
 - **YouTube URL** — Ozetlenecek videonun linki
 - **Custom Instructions** (opsiyonel) — "Summarize in Turkish" veya "List key points" gibi ozel talimatlar
 
-## Gemini API Nedir?
+## Vertex AI ve Gemini Nedir?
 
 Bu projede kullandigimiz en onemli kavram Gemini API.
 
-**Google AI Studio:** Google'in AI modellerine erisim saglayan platform. Ucretsiz tier ile gunluk 1500 istek yapabilirsiniz.
+**Vertex AI:** Google'in kurumsal AI platformu. Gemini dahil tum Google AI modellerine API uzerinden erisim saglar. Her istek GCP kredinizden dusulur.
 
 **Gemini 2.5 Flash:** Google'in hizli ve ekonomik AI modelidir. Metin anlama, ozetleme, soru-cevap gibi gorevlerde cok basarilidir.
 
@@ -178,7 +160,7 @@ Simdi uygulamayi internete aciyoruz!
 ### Deploy komutunu calistirin
 
 ```sh
-cd ~/cloudshell_open/gcp-workshop-tutorial/summarizer-app && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
+cd $(find ~ -path "*/gcp-workshop-tutorial*/summarizer-app" -type d 2>/dev/null | head -1) && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
 ```
 
 Ilk seferde "Do you want to continue (Y/n)?" sorusu gelecek — **Y** yazip Enter'a basin.
