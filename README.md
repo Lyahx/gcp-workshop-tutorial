@@ -10,6 +10,14 @@ Gemini AI ile YouTube videolarını özetleyen uygulama oluşturup Google Cloud 
 ### Kredi kullanan versiyon (Vertex AI):
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/open?git_repo=https://github.com/Lyahx/gcp-workshop-tutorial&tutorial=tutorial.md&cloudshell_git_branch=vertex-ai)
 
+### Hesap sorunu yaşıyorsanız (Vertex AI):
+Cloud Shell'i açıp şu komutları çalıştırın:
+```bash
+git clone -b vertex-ai https://github.com/Lyahx/gcp-workshop-tutorial.git
+cd gcp-workshop-tutorial
+cloudshell launch-tutorial tutorial.md
+```
+
 ## Repo Yapısı
 
 **main branch** → Google AI Studio (ücretsiz)
