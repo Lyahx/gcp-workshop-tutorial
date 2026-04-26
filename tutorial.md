@@ -1,15 +1,17 @@
-# Gemini ile YouTube Ozetleyici — Cloud Run Workshop
+# Hava Durumu API'si — Cloud Run Workshop
 
-Bu tutorial'da Google'in Gemini AI modelini kullanarak YouTube videolarini ozetleyen bir web uygulamasi olusturacak ve Cloud Run'a deploy edeceksiniz.
+Bu tutorial'da Python Flask ile yazilmis bir Hava Durumu API'sini Docker container'ina paketleyecek ve Google Cloud Run'a deploy edeceksiniz.
 
-**Tahmini sure:** 45-60 dakika
-**Maliyet:** Ucretsiz (Free tier ve workshop kredileri)
+Sonunda elinizde internetten erisilebilen, kendi URL'ine sahip bir API olacak.
+
+**Tahmini sure:** 30-40 dakika
+**Maliyet:** Ucretsiz (Free tier)
 
 Baslamak icin **Start** butonuna tiklayin.
 
 ## Proje Secimi
 
-Oncelikle bu tutorial icin kullanacaginiz Google Cloud projesini secin.
+Oncelikle bu tutorial icin kullanacaginiz Google Cloud projesini secin veya yeni bir proje olusturun.
 
 <walkthrough-project-setup billing="true"></walkthrough-project-setup>
 
@@ -17,60 +19,28 @@ Proje hazir oldugunda **Next** butonuna basin.
 
 ## Gerekli API'leri Etkinlestirme
 
-Bu projede hem AI hem de deploy hizmetlerini kullanacagiz. Asagidaki butona tiklayarak hepsini bir seferde etkinlestirin:
+Google Cloud'da her hizmet varsayilan olarak kapalidir. Kullanmadan once API'lerini acmaniz gerekir. Bu bilincli bir guvenlik tasarimidir — yanlislikla hizmet kullanip ucret olusmanizi engeller.
 
-<walkthrough-enable-apis apis="run.googleapis.com,cloudbuild.googleapis.com,cloudresourcemanager.googleapis.com,artifactregistry.googleapis.com,secretmanager.googleapis.com"></walkthrough-enable-apis>
+Asagidaki butona tiklayarak gerekli API'leri etkinlestirin:
+
+<walkthrough-enable-apis apis="run.googleapis.com,cloudbuild.googleapis.com,artifactregistry.googleapis.com"></walkthrough-enable-apis>
 
 **Ne etkinlestirdik?**
 
-- **Cloud Run** — Uygulamamizi serverless olarak calistiracak platform
+- **Cloud Run** — Container'larimizi serverless olarak calistiracak platform
 - **Cloud Build** — Kaynak koddan otomatik Docker image olusturacak servis
-- **Cloud Resource Manager** — Proje ve kaynak yonetimi
-- **Artifact Registry** — Docker image deposu
-- **Secret Manager** — API key'i guvenle saklamak icin
+- **Artifact Registry** — Olusan Docker image'lari saklayacak depo
 
 **Tip:** Etkinlestirme birkac saniye surebilir. Yesil tik gorunene kadar bekleyin.
 
-## Gemini API Key Alma
+## Proje Dosyalarini Inceleme
 
-Bu uygulama Gemini AI kullanarak YouTube videolarini ozetliyor. Bunun icin bir API key gerekiyor.
+Bu repo ile birlikte uygulama dosyalari hazir geldi. Simdi onlari inceleyelim ve ne ise yaradiklarini anlayalim.
 
-### API key olusturun
-
-Asagidaki linke gidin:
-
-```
-https://aistudio.google.com/apikey
-```
-
-1. **"Create API key"** butonuna basin
-2. **"Create API key in new project"** secin
-3. Olusturulan key'i kopyalayin — bir sonraki adimda kullanacagiz
-
-**Onemli:** API key'inizi kimseyle paylasmayiniz!
-
-### API key'i Secret Manager'a kaydedin
-
-Terminalde asagidaki komutu calistirin, `BURAYA_KEY` yerine kopyaladiginiz key'i yapistirin:
+Proje klasorune gidin:
 
 ```sh
-echo -n "BURAYA_KEY" | gcloud secrets create gemini-api-key --data-file=- --project {{project-id}}
-```
-
-### Secret Manager'a erisim izni verin
-
-```sh
-PROJECT_NUMBER=$(gcloud projects describe {{project-id}} --format='value(projectNumber)') && gcloud secrets add-iam-policy-binding gemini-api-key --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/secretmanager.secretAccessor" --project {{project-id}}
-```
-
-**Neden Secret Manager?** API key gibi hassas bilgileri kod icine veya environment variable olarak yazmak guvenli degildir. Secret Manager bu bilgileri sifreliyerek saklar ve sadece yetkili servislerin erisebilecegi sekilde korur.
-
-## Proje Dosyalarini Indirme
-
-Uygulama dosyalari GitHub'da hazir bekliyor.
-
-```sh
-cd ~/cloudshell_open/gcp-workshop-tutorial/summarizer-app
+cd ~/gcp-workshop-tutorial/app
 ```
 
 Dosyalari listeleyin:
@@ -79,161 +49,221 @@ Dosyalari listeleyin:
 ls -la
 ```
 
-Su dosyalari gormelisiniz:
+Uc dosya gormelisiniz:
 
-- **app.py** — Flask backend + Gemini AI entegrasyonu
+- **main.py** — API uygulama kodu (Flask)
 - **requirements.txt** — Python kutuphaneleri
 - **Dockerfile** — Docker paketleme tarifi
-- **templates/index.html** — Web arayuzu
 
-**Not:** Bu repo tutorial baslarken otomatik olarak klonlandi. Dosyalar hazir!
+## main.py — API Kodunu Anlama
 
-## Projeyi Anlama: app.py
-
-Backend kodunu inceleyelim:
+API kodunu inceleyelim:
 
 ```sh
-cat app.py
+cat main.py
 ```
 
-### Kodun yaptiklari
+### Onemli noktalar
 
-**1) Gemini AI baglantisi:**
-Uygulama, Google AI Studio uzerinden Gemini 2.5 Flash modeline baglanir. API key environment variable olarak okunur — kod icine yazilmaz.
+**PORT degiskeni (en alttaki satirlar):**
+Cloud Run, container'a hangi portu dinleyecegini `PORT` ortam degiskeni ile soyler. `os.environ.get("PORT", 8080)` satiri bunu okur. Bu zorunludur.
 
-**2) YouTube ozeti nasil calisir:**
-Gemini'ye YouTube video URL'si ve bir prompt gonderilir. Gemini videoyu analiz edip ozet uretir. Altyazi zorunlu degil — Gemini videoyu direkt anlayabilir.
+**host="0.0.0.0":**
+Container disindan gelen istekleri dinlemek icin gereklidir. Bunu yazmazsaniz API sadece container icinden erisilebilir olur.
 
-**3) Iki temel route (endpoint):**
-- `GET /` — Ana sayfayi gosterir (HTML form)
-- `POST /summarize` — Video linkini alir, Gemini'ye gonderir, ozeti dondurur
+**Endpoint'ler:**
+- `/` — API bilgileri ve kullanim kilavuzu
+- `/sehirler` — Desteklenen sehir listesi
+- `/hava/<sehir>` — Belirli bir sehrin hava durumu
+- `/hava` — Tum sehirlerin hava durumu
+- `/saglik` — Health check (Cloud Run saglik kontrolu icin)
 
-## Projeyi Anlama: index.html
+## requirements.txt — Kutuphaneler
 
-Frontend kodunu inceleyelim:
+Kutuphaneleri inceleyin:
 
 ```sh
-cat templates/index.html
+cat requirements.txt
 ```
 
-Kullanicidan iki sey aliyor:
+- **Flask** — Python web framework'u. API endpoint'lerini tanimlar.
+- **gunicorn** — Production-grade web sunucusu. Flask'in kendi sunucusu gelistirme icindir ve tek seferde bir istek isler. gunicorn ise paralel istekleri yonetir.
 
-- **YouTube URL** — Ozetlenecek videonun linki
-- **Custom Instructions** (opsiyonel) — "Summarize in Turkish" veya "List key points" gibi ozel talimatlar
+Versiyon numaralari sabitlenmis (`==`). Buna **pinning** denir — "bugun calisiyor yarin calismiyor" sorununu onler.
 
-## Gemini API Nedir?
+## Dockerfile — Container Tarifi
 
-Bu projede kullandigimiz en onemli kavram Gemini API.
-
-**Google AI Studio:** Google'in AI modellerine erisim saglayan platform. Ucretsiz tier ile gunluk 1500 istek yapabilirsiniz.
-
-**Gemini 2.5 Flash:** Google'in hizli ve ekonomik AI modelidir. Metin anlama, ozetleme, soru-cevap gibi gorevlerde cok basarilidir.
-
-**Kodda nasil kullaniliyor?**
-```python
-import google.generativeai as genai
-
-# API key ile baglanti kur
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-
-# Modeli sec
-model = genai.GenerativeModel("gemini-2.5-flash")
-
-# Prompt gonder, ozet al
-response = model.generate_content(f"Summarize: {youtube_url}")
-```
-
-Bu uc adim tum AI ozetleme mekanizmasinin ozudur.
-
-## Kredi ve Budget Kurulumu
-
-Workshop'ta size verilen krediyi bu projede kullanacaksiniz. Deploy etmeden once budget kurarak harcamayi takip altina alalim.
-
-### Kredinizi kontrol edin
-
-Billing sayfasina gidin:
-
-<walkthrough-menu-navigation sectionId="BILLING_SECTION"></walkthrough-menu-navigation>
-
-Sol menuden **Credits** sekmesine tiklayin. Size verilen workshop kredisini burada gormelisiniz.
-
-### Budget Alert kurun
+Dockerfile'i inceleyin:
 
 ```sh
-gcloud billing budgets create --billing-account=$(gcloud billing accounts list --format='value(name)' --limit=1) --display-name="Workshop Budget" --budget-amount=5 --threshold-rule=percent=50 --threshold-rule=percent=90 --threshold-rule=percent=100
+cat Dockerfile
 ```
 
-Bu komut ne yapar:
+Her satir bir "katman" (layer) olusturur:
 
-- **$5 limitli** bir budget olusturur
-- Kredinizin **%50, %90 ve %100**'une ulasildiginda e-posta uyarisi gonderir
+1. `FROM python:3.12-slim` — Temel imaj. slim = hafif versiyon (~150MB vs ~900MB)
+2. `WORKDIR /app` — Container icinde calisma dizini
+3. `COPY requirements.txt .` — **Sadece** requirements kopyalanir (caching icin)
+4. `RUN pip install` — Kutuphaneler yuklenir
+5. `COPY . .` — Uygulama kodu kopyalanir
+6. `CMD exec gunicorn ...` — Uygulama baslatilir
 
-**Tip:** Budget sadece uyari verir, hizmetleri otomatik durdurmaz.
+### Docker Layer Caching nedir?
+
+`requirements.txt` ayri kopyalamamizin sebebi Docker'in cache mekanizmasidir. Eger requirements degismediyse, pip install adimi cache'den gelir ve build suresi 3 dakikadan 10 saniyeye duser. Sadece kod degisikligi varsa yalnizca son katman yeniden calisir.
+
+## Lokal Test
+
+Cloud'a deploy etmeden once uygulamayi Cloud Shell icinde test edelim. Hatalari erken yakalamak, deploy asamasinda debug'a gore cok daha hizlidir.
+
+Flask'i kurun ve uygulamayi baslatin:
+
+```sh
+cd ~/gcp-workshop-tutorial/app && pip install Flask --quiet 2>/dev/null && python main.py &
+```
+
+Birkac saniye bekleyin, `Running on http://0.0.0.0:8080` mesajini gormelisiniz.
+
+Ana sayfayi test edin:
+
+```sh
+curl -s http://localhost:8080/ | python3 -m json.tool
+```
+
+Istanbul hava durumu:
+
+```sh
+curl -s http://localhost:8080/hava/istanbul | python3 -m json.tool
+```
+
+Olmayan sehir (404 hatasi bekleniyor):
+
+```sh
+curl -s http://localhost:8080/hava/narnia | python3 -m json.tool
+```
+
+JSON ciktilari goruyorsaniz uygulama dogru calisiyor demektir. Arkaplan surecini durdurun:
+
+```sh
+kill %1 2>/dev/null
+```
 
 ## Cloud Run'a Deploy Etme
 
-Simdi uygulamayi internete aciyoruz!
+Bu tutorial'in en heyecanli adimi! Tek bir komutla kodunuz Google'in sunucularinda calismaya baslayacak.
+
+### Arka planda ne oluyor?
+
+1. Kodunuz Cloud Storage'a yuklenir
+2. Cloud Build, Dockerfile'i okuyup Docker image olusturur
+3. Image, Artifact Registry'ye kaydedilir
+4. Cloud Run bu image'dan container baslatir ve URL atar
 
 ### Deploy komutunu calistirin
 
 ```sh
-cd ~/cloudshell_open/gcp-workshop-tutorial/summarizer-app && gcloud run deploy youtube-summarizer --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
+cd ~/gcp-workshop-tutorial/app && gcloud run deploy hava-durumu-api --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
 ```
 
-Ilk seferde "Do you want to continue (Y/n)?" sorusu gelecek — **Y** yazip Enter'a basin.
+Ilk seferde Artifact Registry deposu olusturmak icin izin sorulacak — **Y** yazip Enter'a basin.
 
-**Bu adim 3-5 dakika surebilir.** Python image indiriliyor ve kutuphaneler kuruluyor.
-
-### API key'i servise baglayin
-
-```sh
-gcloud run services update youtube-summarizer --region us-central1 --project {{project-id}} --set-secrets GEMINI_API_KEY=gemini-api-key:latest
-```
+**Bu adim 2-4 dakika surebilir.** Sabirli olun.
 
 ### Basarili deploy ciktisi
 
+Suna benzer bir cikti goreceksiniz:
+
 ```terminal
-Service [youtube-summarizer] revision [youtube-summarizer-00001-xxx]
+Service [hava-durumu-api] revision [hava-durumu-api-00001-xxx]
     has been deployed and is serving 100 percent of traffic.
-Service URL: https://youtube-summarizer-xxxxx-uc.a.run.app
+Service URL: https://hava-durumu-api-xxxxx-uc.a.run.app
 ```
 
-Bu URL sizin AI uygulamanizin adresi!
+Bu URL sizin API'nizin adresi!
 
-## Uygulamayi Test Etme
+## API'yi Test Etme
+
+Artik API'niz internette yayinda.
 
 URL'yi bir degiskene atayin:
 
 ```sh
-SERVICE_URL=$(gcloud run services describe youtube-summarizer --region us-central1 --project {{project-id}} --format='value(status.url)') && echo "Uygulama adresiniz: $SERVICE_URL"
+SERVICE_URL=$(gcloud run services describe hava-durumu-api --region us-central1 --project {{project-id}} --format='value(status.url)') && echo "API adresiniz: $SERVICE_URL"
 ```
 
-Ana sayfanin calisiyor mu kontrol edin:
+Ana sayfa:
 
 ```sh
-curl -s $SERVICE_URL/ | head -5
+curl -s $SERVICE_URL/ | python3 -m json.tool
 ```
 
-### Tarayicida test edin
+Istanbul hava durumu:
 
-URL'yi kopyalayip tarayicinizin adres cubuguna yapistirin.
+```sh
+curl -s $SERVICE_URL/hava/istanbul | python3 -m json.tool
+```
 
-1. Herhangi bir YouTube video URL'si yapistirin
-2. Opsiyonel: Custom Instructions girin — ornegin "Summarize in Turkish, use bullet points"
-3. **Summarize Content** butonuna basin
-4. Gemini birkaç saniye icinde ozeti uretecek!
+Tum sehirler:
+
+```sh
+curl -s $SERVICE_URL/hava | python3 -m json.tool
+```
+
+Saglik kontrolu:
+
+```sh
+curl -s $SERVICE_URL/saglik | python3 -m json.tool
+```
+
+**Tip:** Bu URL dunya genelinde herkese aciktir. Arkadaslariniza gonderip deneyebilirsiniz!
 
 ## Cloud Console'dan Inceleme
 
-Deploy ettigimiz servisi goruntusel arayuzden inceleyelim.
+Simdi deploy ettigimiz servisi goruntusel arayuzden inceleyelim.
+
+Cloud Console'da Cloud Run sayfasina gidin:
 
 <walkthrough-menu-navigation sectionId="CLOUD_RUN_SECTION"></walkthrough-menu-navigation>
 
-`youtube-summarizer` servisine tiklayip su sekmeleri inceleyin:
+Servis listesinde **hava-durumu-api** servisini goreceksiniz. Yesil tik saglikli calistigini gosterir.
 
-- **METRICS** — Kac istek geldi, Gemini kac saniyede yanit verdi
-- **LOGS** — Her ozetleme istegi burada gorunur
+Servise tiklayip su sekmeleri inceleyin:
+
+- **METRICS** — Istek sayisi, yanit suresi, hata orani grafikleri
+- **LOGS** — Az once yaptiginiz test istekleri burada gorunur (GET 200, GET 404 vs.)
 - **REVISIONS** — Deploy gecmisi, her deploy yeni bir revision olusturur
+
+## Kodu Guncelleme ve Yeniden Deploy
+
+Gercek hayatta surekli kod guncellersiniz. Cloud Run'da guncelleme ayni komutu tekrar calistirmak kadar kolay.
+
+Yeni sehirler ekleyin:
+
+```sh
+cd ~/gcp-workshop-tutorial/app && sed -i 's/"trabzon": {"lat": 41.00, "lon": 39.72},/"trabzon": {"lat": 41.00, "lon": 39.72},\n    "konya": {"lat": 37.87, "lon": 32.48},\n    "gaziantep": {"lat": 37.06, "lon": 37.38},/' main.py
+```
+
+Degisikligi kontrol edin:
+
+```sh
+grep -A3 "trabzon" main.py
+```
+
+`konya` ve `gaziantep` satirlarini gormelisiniz.
+
+Tekrar deploy edin:
+
+```sh
+cd ~/gcp-workshop-tutorial/app && gcloud run deploy hava-durumu-api --source . --region us-central1 --allow-unauthenticated --project {{project-id}}
+```
+
+Bu sefer daha hizli olacak — Docker layer caching sayesinde!
+
+Yeni sehri test edin:
+
+```sh
+curl -s $SERVICE_URL/hava/konya | python3 -m json.tool
+```
 
 ## Temizlik
 
@@ -242,7 +272,7 @@ Workshop bittikten sonra gereksiz ucret olusmamaasi icin kaynaklari temizleyin.
 Cloud Run servisini silin:
 
 ```sh
-gcloud run services delete youtube-summarizer --region us-central1 --project {{project-id}} --quiet
+gcloud run services delete hava-durumu-api --region us-central1 --project {{project-id}} --quiet
 ```
 
 Artifact Registry deposunu silin:
@@ -251,66 +281,32 @@ Artifact Registry deposunu silin:
 gcloud artifacts repositories delete cloud-run-source-deploy --location=us-central1 --project={{project-id}} --quiet
 ```
 
-Secret'i silin:
-
-```sh
-gcloud secrets delete gemini-api-key --project={{project-id}} --quiet
-```
-
-Veya projenin tamamini silin:
+**Tip:** En temiz yontem projeyi silmektir. Bu projedeki tum kaynaklari otomatik siler:
 
 ```sh
 gcloud projects delete {{project-id}}
 ```
 
-## Harcama Ozeti — Krediniz Nereye Gitti?
-
-Servisleri sildikten sonra bu projenin toplam ne kadara mal oldugunu goreceğiz.
-
-### Billing Reports sayfasina gidin
-
-<walkthrough-menu-navigation sectionId="BILLING_SECTION"></walkthrough-menu-navigation>
-
-Sol menuden **Reports** sekmesine tiklayin.
-
-### Ne goreceksiniz?
-
-Grafik halinde hizmet bazinda harcama dagilimini goreceksiniz:
-
-- **Cloud Run** — Container calisma suresi. Serverless oldugu icin sadece istek geldiginde ucret olusur.
-- **Cloud Build** — Image build suresi. Ilk deploy sonrasi ucret olusur.
-- **Artifact Registry** — Docker image depolama.
-
-Sag ust kosedeki tarih filtresini bugunle sinirlandirin. Projenin toplam maliyetini $0.05 - $0.30 arasinda gormeniz beklenir.
-
-**Iste bu kadar!** Workshop boyunca harcanan gercek maliyeti gordunuz. Kredinizin geri kalani diger projelerde kullanilabilir.
-
 ## Tebrikler!
 
-Gercek bir AI uygulamasi olusturup internete deploy ettiniz!
+Tutorial'i basariyla tamamladiniz!
 
-**Bu projede ogrendikleriniz:**
+**Ogrendikleriniz:**
 
-- **Gemini API** — Google AI Studio uzerinden AI modeline erisim
-- **Secret Manager** — Hassas bilgileri guvenli saklama
-- **Flask full-stack** — Backend + frontend entegrasyonu
-- **Cloud Run deploy** — AI destekli uygulamalari serverless deploy etme
-- **Budget & Credits** — GCP kredi yonetimi ve maliyet takibi
+- **Cloud Shell** — Tarayicida calisan terminal
+- **Flask API** — Python ile REST API olusturma
+- **Dockerfile** — Uygulamayi container'a paketleme
+- **Layer Caching** — Docker build optimizasyonu
+- **Cloud Build** — Koddan otomatik image olusturma
+- **Cloud Run** — Serverless container platformu
+- **Revisions** — Versiyon yonetimi ve rollback
 
 ### Challenge
 
-Kendi basiniza deneyin: Custom Instructions kutusuna farkli diller ve formatlar deneyin:
-- "Summarize in Turkish using bullet points"
-- "Extract only the key statistics mentioned"
-- "Write a tweet-sized summary"
+Kendi basiniza deneyin: `/hava/karsilastir?sehir1=istanbul&sehir2=ankara` endpoint'i ekleyerek iki sehrin hava durumunu karsilastirin.
 
 ### Faydali linkler
 
-- [Google AI Studio](https://aistudio.google.com)
-- [Gemini API dokumantasyonu](https://ai.google.dev/gemini-api/docs)
 - [Cloud Run dokumantasyonu](https://cloud.google.com/run/docs)
-### Faydali linkler
-
-- [Vertex AI dokumantasyonu](https://cloud.google.com/vertex-ai/docs)
-- [Gemini API referansi](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini)
-- [youtube-transcript-api](https://pypi.org/project/youtube-transcript-api/)
+- [Cloud Build ile CI/CD](https://cloud.google.com/build/docs)
+- [Cloud SQL baglantisi](https://cloud.google.com/sql/docs/postgres/connect-run)
