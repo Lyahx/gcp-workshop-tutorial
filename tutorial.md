@@ -7,6 +7,10 @@ Bu tutorial'da Google'in Gemini AI modelini kullanarak YouTube videolarini ozetl
 
 Baslamak icin **Start** butonuna tiklayin.
 
+> **Onemli:** Tutorial paneli yuklenmiyorsa VPN'inizi kapatin ve tekrar deneyin.
+> 
+> **Hesap:** Bu linke tıklamadan once workshop icin kullanacaginiz Google hesabiyla [console.cloud.google.com](https://console.cloud.google.com) adresine giris yaptiginizdan emin olun.
+
 ## Proje Secimi
 
 Oncelikle bu tutorial icin kullanacaginiz Google Cloud projesini secin.
@@ -14,6 +18,24 @@ Oncelikle bu tutorial icin kullanacaginiz Google Cloud projesini secin.
 <walkthrough-project-setup billing="true"></walkthrough-project-setup>
 
 Proje hazir oldugunda **Next** butonuna basin.
+
+## Billing Hesabini Baglama
+
+API'leri etkinlestirebilmek icin projenize bir billing hesabi baglanmis olmali. Kredi bu billing hesabinda olacak.
+
+Billing sayfasina gidin:
+
+<walkthrough-menu-navigation sectionId="BILLING_SECTION"></walkthrough-menu-navigation>
+
+**Your projects** sekmesine tiklayin, projenizi bulun ve **Actions (3 nokta)** → **Change billing** secin. Acilan listeden workshop kredinizin bulundugu billing hesabini secin ve **Set account** butonuna basin.
+
+Sonra terminalde billing'in aktif oldugunu dogrulayin:
+
+```sh
+gcloud billing projects describe $PROJECT_ID 2>/dev/null | grep billingEnabled
+```
+
+`billingEnabled: true` gormelisiniz. Gormuyorsaniz billing baglamayi tekrar deneyin.
 
 ## Gerekli API'leri Etkinlestirme
 
@@ -45,14 +67,27 @@ export PROJECT_ID=$(gcloud config get-value project) && echo "Proje ID: $PROJECT
 
 Proje ID'nizi gormelisiniz. Bos geliyorsa proje secmeden devam etmissiniz demektir — geri donup proje secin.
 
-### Service account'a Vertex AI izni verin
+### Gerekli izinleri verin
+
+Bu uc komut; Cloud Run'in Vertex AI'a erisebilmesi, Cloud Storage'dan kaynak yukliyebilmesi ve log yazabilmesi icin gerekli izinleri verir:
 
 ```sh
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)') && gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" --role="roles/aiplatform.user"
 ```
 
-**Ne yapti bu komut?**
-Cloud Run uygulamaniz bir "service account" kimligiyle calisir. Bu komut o kimlige Vertex AI'a istek gonderme iznini verdi. Olmadan uygulama 403 hatasi alir.
+```sh
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')-compute@developer.gserviceaccount.com" --role="roles/storage.admin"
+```
+
+```sh
+gcloud projects add-iam-policy-binding $PROJECT_ID --member="serviceAccount:$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')-compute@developer.gserviceaccount.com" --role="roles/logging.logWriter"
+```
+
+**Ne yapti bu komutlar?**
+
+- **aiplatform.user** — Gemini modeline istek gonderme izni
+- **storage.admin** — Deploy sirasinda kaynak dosyalari Cloud Storage'a yukleme izni
+- **logging.logWriter** — Uygulama loglarini Cloud Logging'e yazma izni
 
 **Neden Vertex AI?**
 Vertex AI, Google'in kurumsal AI platformudur. Her Gemini cagrisi dogrudan GCP kredinizden dusuler — boylece workshop kredinizi somut olarak kullanmis olursunuz.
@@ -260,15 +295,16 @@ Sol menuden **Reports** sekmesine tiklayin.
 ### Ne goreceksiniz?
 
 Grafik halinde hizmet bazinda harcama dagilimini goreceksiniz:
- 
+
 - **Vertex AI** — Her Gemini cagrisi token basina ucretlendirilir. Kisa bir video ozeti yaklasik $0.001-0.01 arasinda.
 - **Cloud Run** — Container calisma suresi. Serverless oldugu icin sadece istek geldiginde ucret olusur.
 - **Cloud Build** — Image build suresi. Ilk deploy sonrasi ucret olusur.
 - **Artifact Registry** — Docker image depolama.
+
 Sag ust kosedeki tarih filtresini bugunle sinirlandirin. Projenin toplam maliyetini $0.05 - $0.30 arasinda gormeniz beklenir.
- 
+
 **Onemli Not:** Harcamalar anlık gozukmez — birkac saat, bazen 24 saate kadar surebilir. Simdi $0.00 goruyorsaniz normal, birkaç saat sonra tekrar bakin.
- 
+
 **Iste bu kadar!** Workshop boyunca harcanan gercek maliyeti gordunuz. Kredinizin geri kalani diger projelerde kullanilabilir.
 
 ## Tebrikler!
