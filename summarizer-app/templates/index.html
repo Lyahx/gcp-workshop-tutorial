@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@300;400;500&display=swap');
 
@@ -320,7 +321,7 @@
                 const text = await response.text();
                 loading.style.opacity = "0";
                 setTimeout(() => { loading.classList.add('hidden'); loading.classList.remove('flex'); }, 300);
-                summaryText.textContent = text;
+                summaryText.innerHTML = marked.parse(text);
                 summaryResult.classList.remove('hidden');
                 summaryResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (err) {
